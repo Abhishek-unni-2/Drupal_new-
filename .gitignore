@@ -1,9 +1,25 @@
-/core/
+# Ignore vendor directory
 /vendor/
+
+# Ignore Drupal private files
 /sites/*/files/
-/sites/*/private/
+
+# Ignore settings.php (contains DB creds)
+/sites/*/settings.php
+/sites/*/services.yml
+
+# Ignore local config
 /sites/*/settings.local.php
-/sites/*/services.local.yml
-/.idea/
-/.vscode/
-/node_modules/
+/sites/*/development.services.yml
+
+# Ignore config sync if stored inside webroot
+/sites/*/files/config_*/
+
+# Ignore composer lock backup
+composer.lock
+
+# Ignore IDE/editor files
+.idea/
+.vscode/
+*.swp
+

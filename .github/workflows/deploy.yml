@@ -1,0 +1,27 @@
+name: CI/CD for Drupal
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, Tag, and Push image to ECR
+        run: |
+          IMAGE_REPO=249772004870.dkr.ecr.us-east-1.amazonaws.com/drupal-app
+          IMAGE_TAG=${{ github.sha }}
+
+          # Build and push with both tags
+          docker build -t $IMAGE_REPO:latest -t $IMAGE_REPO:$IMAGE_TAG .
+          docker push $IMAGE_REPO:latest
+          docker push $IMAGE_REPO:$IMAGE_TAG

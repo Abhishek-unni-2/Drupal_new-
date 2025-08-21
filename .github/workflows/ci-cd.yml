@@ -1,42 +1,31 @@
-name: CI/CD - Build & Push Drupal Image
+name: Drupal CI/CD
 
 on:
   push:
-    branches:
-      - main   # runs only when you push to main branch
+    branches: [main]
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout source code
+      - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Log in to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build, Tag, and Push Docker image
-        env:
-          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
+      - name: Log in to ECR
         run: |
-          IMAGE_REPO_NAME=drupal-app   # change to your ECR repo name
-          IMAGE_TAG=${{ github.sha }}
-          ECR_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$IMAGE_REPO_NAME
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
 
-          echo "Building Docker image..."
-          docker build -t $ECR_URI:$IMAGE_TAG .
+      - name: Build Docker Image
+        run: docker build -t drupal-app .
 
-          echo "Pushing image to ECR..."
-          docker push $ECR_URI:$IMAGE_TAG
-
-          echo "Image pushed: $ECR_URI:$IMAGE_TAG"
+      - name: Tag & Push to ECR
+        run: |
+          docker tag drupal-app:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/drupal-app:latest
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/drupal-app:latest

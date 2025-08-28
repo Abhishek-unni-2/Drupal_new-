@@ -23,3 +23,12 @@ composer.lock
 .vscode/
 *.swp
 
+# -----------------------
+# Terraform
+# -----------------------
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.zip
+crash.log
+

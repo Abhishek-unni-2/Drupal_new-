@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: mysql
+  name: db  # CHANGED FROM 'mysql' TO 'db'
   labels:
     app: mysql
 spec:
@@ -88,7 +88,7 @@ spec:
             - containerPort: 80
           env:
             - name: DB_HOST
-              value: mysql
+              value: mysql  # This can stay as 'mysql' since we're changing the service name to 'db'
             - name: DB_NAME
               value: concretecms
             - name: DB_USER

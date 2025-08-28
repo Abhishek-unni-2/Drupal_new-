@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
 
+env:
+  AWS_REGION: eu-north-1
+  EKS_CLUSTER_NAME: drupal-eks
+  ECR_REPOSITORY: drupal-app
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -23,57 +28,77 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       # -----------------------
-      # Step 3: Create ECR repo if not exists
+      # Step 3: Set up ECR
       # -----------------------
       - name: Ensure ECR Repository Exists
         run: |
-          aws ecr describe-repositories --repository-names drupal-app --region ${{ secrets.AWS_REGION }} || \
-          aws ecr create-repository --repository-name drupal-app --region ${{ secrets.AWS_REGION }}
+          aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }} || \
+          aws ecr create-repository --repository-name ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }}
 
-      # -----------------------
-      # Step 4: Log in to Amazon ECR
-      # -----------------------
       - name: Log in to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
       # -----------------------
-      # Step 5: Build, Tag & Push Docker Image
+      # Step 4: Build & Push Docker Image
       # -----------------------
       - name: Build and Push Docker Image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: drupal-app
-          IMAGE_TAG: ${{ github.sha }}
+        id: build-image
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          echo "✅ Docker image pushed!"
+          # Get ECR registry from login step
+          ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
+          
+          # Build and tag the image
+          docker build -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:${{ github.sha }} .
+          docker tag $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:${{ github.sha }} $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:latest
+          
+          # Push both tags
+          docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:latest
+          
+          # Save the image URI for later steps
+          echo "IMAGE_URI=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:${{ github.sha }}" >> $GITHUB_ENV
+          echo "✅ Docker image pushed: $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
 
       # -----------------------
-      # Step 6: Connect to EKS
+      # Step 5: Connect to EKS
       # -----------------------
-      - name: Connect to EKS
+      - name: Connect to EKS Cluster
         run: |
-          aws eks --region ${{ secrets.AWS_REGION }} update-kubeconfig --name drupal-eks
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ env.EKS_CLUSTER_NAME }}
 
       # -----------------------
-      # Step 7: Deploy Kubernetes manifests
+      # Step 6: Deploy to Kubernetes
       # -----------------------
-      - name: Deploy to EKS
+      - name: Deploy Application
         run: |
+          # Apply all Kubernetes manifests
           kubectl apply -f k8s/
-
-      # -----------------------
-      # Step 8: Update Deployment with latest image
-      # -----------------------
-      - name: Update Drupal Deployment Image
-        run: |
+          
+          # Update the deployment with the new image
           kubectl set image deployment/concrete-cms \
-          concrete-cms=$ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
+            concrete-cms=${{ env.IMAGE_URI }} \
+            --record=true
+          
+          # Wait for rollout to complete
+          kubectl rollout status deployment/concrete-cms --timeout=300s
+          
+          # Verify pods are running
+          kubectl get pods
+          echo "✅ Deployment completed successfully!"
 
+      # -----------------------
+      # Step 7: Verify Deployment
+      # -----------------------
+      - name: Verify Deployment
+        run: |
+          # Check all resources
+          kubectl get all
+          
+          # Get service URL
+          kubectl get svc concrete-cms-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' | echo "Application URL: http://$(cat)"

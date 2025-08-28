@@ -44,6 +44,16 @@ spec:
               value: StrongPass123!
           ports:
             - containerPort: 3306
+          readinessProbe:
+            tcpSocket:
+              port: 3306
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 3306
+            initialDelaySeconds: 120
+            periodSeconds: 20
           volumeMounts:
             - name: mysql-data
               mountPath: /var/lib/mysql
@@ -70,10 +80,10 @@ spec:
         app: concrete-cms
     spec:
       imagePullSecrets:
-        - name: ghcr-secret
+        - name: ecr-secret
       containers:
         - name: concrete-cms
-          image: ghcr.io/partheeban37/concrete-cms:latest
+          image: 099751327699.dkr.ecr.eu-north-1.amazonaws.com/drupal-app:latest
           ports:
             - containerPort: 80
           env:
@@ -85,6 +95,18 @@ spec:
               value: concrete
             - name: DB_PASSWORD
               value: StrongPass123!
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 120
+            periodSeconds: 20
           volumeMounts:
             - mountPath: /var/www/html/application/config
               name: config-storage

@@ -1,25 +1,21 @@
+# ==========================
 # MySQL Service & Deployment
+# ==========================
 apiVersion: v1
 kind: Service
 metadata:
-  name: db  # CHANGED FROM 'mysql' TO 'db'
-  labels:
-    app: mysql
+  name: mysql
 spec:
   selector:
     app: mysql
   ports:
     - port: 3306
       targetPort: 3306
-  clusterIP: None
-
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mysql
-  labels:
-    app: mysql
 spec:
   replicas: 1
   selector:
@@ -59,16 +55,16 @@ spec:
               mountPath: /var/lib/mysql
       volumes:
         - name: mysql-data
-          emptyDir: {}
+          emptyDir: {} # Replace with PersistentVolumeClaim in production
 
-# Drupal (Concrete CMS) Service & Deployment
+# ==========================
+# Drupal (Concrete CMS) Deployment
+# ==========================
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: concrete-cms
-  labels:
-    app: concrete-cms
 spec:
   replicas: 2
   selector:
@@ -80,15 +76,16 @@ spec:
         app: concrete-cms
     spec:
       imagePullSecrets:
-        - name: ecr-secret
+        - name: ghcr-secret
       containers:
         - name: concrete-cms
-          image: 099751327699.dkr.ecr.eu-north-1.amazonaws.com/drupal-app:latest
+          image: ghcr.io/partheeban37/concrete-cms:latest
           ports:
             - containerPort: 80
+          imagePullPolicy: Always
           env:
             - name: DB_HOST
-              value: db  # <-- FIXED HERE
+              value: mysql
             - name: DB_NAME
               value: concretecms
             - name: DB_USER
@@ -119,8 +116,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: concrete-cms-service
-  labels:
-    app: concrete-cms
 spec:
   selector:
     app: concrete-cms

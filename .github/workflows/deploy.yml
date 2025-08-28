@@ -14,13 +14,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout Code (FIXED)
+      # Step 1: Checkout Code
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # This fixes git config issues
+          fetch-depth: 0
 
-      # Step 2: Configure AWS (FIXED)
+      # Step 2: Configure AWS
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -28,7 +28,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Step 3: ECR Setup (FIXED)
+      # Step 3: ECR Setup
       - name: Ensure ECR Repository Exists
         run: |
           aws ecr describe-repositories --repository-names $ECR_REPOSITORY --region $AWS_REGION || \
@@ -40,19 +40,18 @@ jobs:
         with:
           region: ${{ env.AWS_REGION }}
 
-      # Step 4: Build & Push (FIXED)
+      # Step 4: Build & Push
       - name: Build and Push Docker Image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          # Use proper ECR registry format
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA $ECR_REGISTRY/$ECR_REPOSITORY:latest
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           echo "IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA" >> $GITHUB_ENV
 
-      # Step 5: EKS Deployment (FIXED)
+      # Step 5: EKS Deployment
       - name: Configure EKS Access
         run: |
           aws eks update-kubeconfig \
@@ -62,5 +61,8 @@ jobs:
       - name: Deploy to Kubernetes
         run: |
           kubectl apply -f k8s/
+          # Ensure DB_HOST is always set correctly
+          kubectl set env deployment/concrete-cms DB_HOST=db
+          # Update deployment with the new image
           kubectl set image deployment/concrete-cms concrete-cms=$IMAGE_URI
           kubectl rollout status deployment/concrete-cms --timeout=300s

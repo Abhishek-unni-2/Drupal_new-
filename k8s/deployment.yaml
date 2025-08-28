@@ -1,0 +1,108 @@
+# MySQL Service & Deployment
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  labels:
+    app: mysql
+spec:
+  selector:
+    app: mysql
+  ports:
+    - port: 3306
+      targetPort: 3306
+  clusterIP: None
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+  labels:
+    app: mysql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:8.0
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: rootpass
+            - name: MYSQL_DATABASE
+              value: concretecms
+            - name: MYSQL_USER
+              value: concrete
+            - name: MYSQL_PASSWORD
+              value: StrongPass123!
+          ports:
+            - containerPort: 3306
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+      volumes:
+        - name: mysql-data
+          emptyDir: {}
+
+# Drupal (Concrete CMS) Service & Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: concrete-cms
+  labels:
+    app: concrete-cms
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: concrete-cms
+  template:
+    metadata:
+      labels:
+        app: concrete-cms
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: concrete-cms
+          image: ghcr.io/partheeban37/concrete-cms:latest
+          ports:
+            - containerPort: 80
+          env:
+            - name: DB_HOST
+              value: mysql
+            - name: DB_NAME
+              value: concretecms
+            - name: DB_USER
+              value: concrete
+            - name: DB_PASSWORD
+              value: StrongPass123!
+          volumeMounts:
+            - mountPath: /var/www/html/application/config
+              name: config-storage
+      volumes:
+        - name: config-storage
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: concrete-cms-service
+  labels:
+    app: concrete-cms
+spec:
+  selector:
+    app: concrete-cms
+  ports:
+    - port: 80
+      targetPort: 80
+  type: LoadBalancer

@@ -14,13 +14,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout Code
+      # 1. Checkout the code
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # Step 2: Configure AWS
+      # 2. Configure AWS credentials
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -28,19 +28,20 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Step 3: ECR Setup
+      # 3. Ensure ECR repository exists
       - name: Ensure ECR Repository Exists
         run: |
           aws ecr describe-repositories --repository-names $ECR_REPOSITORY --region $AWS_REGION || \
           aws ecr create-repository --repository-name $ECR_REPOSITORY --region $AWS_REGION
 
+      # 4. Login to Amazon ECR
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
         with:
           region: ${{ env.AWS_REGION }}
 
-      # Step 4: Build & Push
+      # 5. Build and push Docker image
       - name: Build and Push Docker Image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -51,18 +52,26 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           echo "IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA" >> $GITHUB_ENV
 
-      # Step 5: EKS Deployment
+      # 6. Configure kubectl for EKS
       - name: Configure EKS Access
         run: |
           aws eks update-kubeconfig \
             --region $AWS_REGION \
             --name $EKS_CLUSTER_NAME
 
-      - name: Deploy to Kubernetes
+      # 7. Apply MySQL Deployment first
+      - name: Deploy MySQL
         run: |
-          kubectl apply -f k8s/
-          # Ensure DB_HOST is always set correctly
-          kubectl set env deployment/concrete-cms DB_HOST=db
-          # Update deployment with the new image
+          kubectl apply -f k8s/deployment.yaml --selector='app=mysql'
+
+      # 8. Wait until MySQL pod is ready
+      - name: Wait for MySQL
+        run: |
+          kubectl wait --for=condition=ready pod -l app=mysql --timeout=300s
+
+      # 9. Deploy Drupal (Concrete CMS)
+      - name: Deploy Drupal
+        run: |
+          kubectl apply -f k8s/deployment.yaml --selector='app=concrete-cms'
           kubectl set image deployment/concrete-cms concrete-cms=$IMAGE_URI
           kubectl rollout status deployment/concrete-cms --timeout=300s
